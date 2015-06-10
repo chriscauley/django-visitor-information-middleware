@@ -45,33 +45,34 @@ class TimezoneMiddleware(object):
     if request.path.startswith("/static") or request.path.startswith("/media"):
       return
     user = request.user
-    timezone = None
-    print TIMEZONE_FIELD
+    user_timezone = None
     if TIMEZONE_FIELD:
-      timezone = getattr(user, TIMEZONE_FIELD, None)
+      user_timezone = getattr(user, TIMEZONE_FIELD, None)
 
-    if not timezone:
+    if not user_timezone:
       timezone_name = request.session.get('django_timezone',None)
       if timezone_name:
-        timezone = pytz.timezone(timezone_name)
-      if not timezone and gi4:
+        user_timezone = pytz.timezone(timezone_name)
+      if not user_timezone and gi4:
         timezone_name = gi4.time_zone_by_addr(request.META['REMOTE_ADDR'])
         if timezone_name:
-          timezone = pytz.timezone(timezone_name)
+          user_timezone = pytz.timezone(timezone_name)
           request.session['django_timezone'] = timezone_name
       # Save us a little time next request
-      if timezone and user.is_authenticated():
-        setattr(user,TIMEZONE_FIELD,timezone)
+      if user_timezone and user.is_authenticated():
+        setattr(user,TIMEZONE_FIELD,user_timezone)
         user.save()
       
     #default to houston time since most our users are on the Space Station
-    if not timezone:
+    if not user_timezone:
       pytz.timezone('America/Chicago')
 
     try:
-      timezone.activate(timezone)
+      print 'activating timezone'
+      timezone.activate(user_timezone)
+      print 'activated'
     except Exception, e:
-      extra = {'_user': request.user, '_timezone': timezone}
+      extra = {'_user': request.user, '_timezone': user_timezone}
       logger.error('Invalid timezone selected: %s' % (str(e)), extra=extra)
 
 
