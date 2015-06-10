@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
+import logging, pytz
 
 from django.utils import timezone
 from pygeoip import GeoIP, MEMORY_CACHE
@@ -22,100 +22,111 @@ from django_visitor_information import constants
 from django_visitor_information import settings
 
 __all__ = [
-    'TimezoneMiddleware',
-    'VisitorInformationMiddleware'
+  'TimezoneMiddleware',
+  'VisitorInformationMiddleware'
 ]
 
 logger = logging.getLogger('django_visitor_information.middleware')
-gi4 = GeoIP(settings.VISITOR_INFO_GEOIP_DATABASE_PATH, MEMORY_CACHE)
-
+try:
+  gi4 = GeoIP(settings.VISITOR_INFO_GEOIP_DATABASE_PATH, MEMORY_CACHE)
+except IOError:
+  print "no goip database :("
+  gi4 = None
+TIMEZONE_FIELD = getattr(settings,'USER_TIMEZONE_FIELD','timezone')
 
 class TimezoneMiddleware(object):
-    """
-    This middleware activates a timezone for an authenticated user.
+  """
+  This middleware activates a timezone for an authenticated user.
 
-    This middleware assumes that a User model references a UserProfile model
-    which has a "timezone" field.
-    """
-    def process_request(self, request):
-        if request.user.is_authenticated():
-            profile = request.user.get_profile()
-            user_timezone = \
-                getattr(profile,
-                        settings.VISITOR_INFO_PROFILE_TIMEZONE_FIELD,
-                        None)
+  This middleware assumes that a User model references a UserProfile model
+  which has a "timezone" field.
+  """
+  def process_request(self, request):
+    if request.path.startswith("/static") or request.path.startswith("/media"):
+      return
+    user = request.user
+    timezone = None
+    print TIMEZONE_FIELD
+    if TIMEZONE_FIELD:
+      timezone = getattr(user, TIMEZONE_FIELD, None)
 
-            if not profile or not user_timezone:
-                logger.debug('Profile or timezone not available, skipping '
-                             'timezone activation...')
-                return
+    if not timezone:
+      timezone_name = request.session.get('django_timezone',None)
+      if timezone_name:
+        timezone = pytz.timezone(timezone_name)
+      if not timezone:
+        timezone_name = gi4.time_zone_by_addr(request.META['REMOTE_ADDR'])
+        if timezone_name:
+          timezone = pytz.timezone(timezone_name)
+          request.session['django_timezone'] = timezone_name
+      # Save us a little time next request
+      if timezone and user.is_authenticated():
+        setattr(user,TIMEZONE_FIELD,timezone)
+        user.save()
+      
+    #default to houston time since most our users are on the Space Station
+    if not timezone:
+      pytz.timezone('America/Chicago')
 
-            try:
-                timezone.activate(user_timezone)
-            except Exception, e:
-                extra = {'_user': request.user, '_timezone': user_timezone}
-                logger.error('Invalid timezone selected: %s' % (str(e)),
-                             extra=extra)
+    try:
+      timezone.activate(timezone)
+    except Exception, e:
+      extra = {'_user': request.user, '_timezone': timezone}
+      logger.error('Invalid timezone selected: %s' % (str(e)), extra=extra)
 
 
 class VisitorInformationMiddleware(object):
-    """
-    Middleware which adds the following keys to the request.visitor dictionary:
-        - country
-        - city
-        - location.timezone
-        - location.unit_system
-        - user.timezone
-        - user.unit_system
-        - cookie_notice
-    """
-    def process_request(self, request):
-        ip = request.META['REMOTE_ADDR']
+  """
+  Middleware which adds the following keys to the request.visitor dictionary:
+    - country
+    - city
+    - location.timezone
+    - location.unit_system
+    - user.timezone
+    - user.unit_system
+    - cookie_notice
+  """
+  def process_request(self, request):
+    ip = request.META['REMOTE_ADDR']
 
-        city = None
-        country = None
-        unit_system = None
+    city = None
+    country = None
+    unit_system = None
 
-        record = gi4.record_by_addr(ip)
-        location_timezone = gi4.time_zone_by_addr(ip)
+    record = gi4.record_by_addr(ip)
+    location_timezone = gi4.time_zone_by_addr(ip)
 
-        if not location_timezone or not record:
-            extra = {'_user': request.user, '_ip': ip}
-            logger.debug('Couldn\'t detect timezone for ip',
-                         extra=extra)
+    if not location_timezone or not record:
+      extra = {'_user': request.user, '_ip': ip}
+      logger.debug('Couldn\'t detect timezone for ip', extra=extra)
 
-        if record:
-            city = record['city']
-            country = record['country_name']
+    if record:
+      city = record['city']
+      country = record['country_name']
 
-            if country in constants.COUNTRIES_WITH_IMPERIAL_SYSTEM:
-                unit_system = 'imperial'
-            else:
-                unit_system = 'metric'
+      if country in constants.COUNTRIES_WITH_IMPERIAL_SYSTEM:
+        unit_system = 'imperial'
+      else:
+        unit_system = 'metric'
 
-        cookie_notice = country in \
-            constants.COOKIE_NOTICE_PARTICIPATING_COUNTRIES
+    cookie_notice = country in constants.COOKIE_NOTICE_PARTICIPATING_COUNTRIES
 
-        request.visitor = {}
-        request.visitor['country'] = country
-        request.visitor['city'] = city
-        request.visitor['location'] = {
-            'timezone': location_timezone,
-            'unit_system': unit_system
-        }
+    request.visitor = {}
+    request.visitor['country'] = country
+    request.visitor['city'] = city
+    request.visitor['location'] = {
+      'timezone': location_timezone,
+      'unit_system': unit_system
+    }
 
-        if request.user.is_authenticated() and request.user.get_profile():
-            # If user is logged in, add current settings
-            profile = request.user.get_profile()
-            user_timezone = \
-                getattr(profile,
-                        settings.VISITOR_INFO_PROFILE_TIMEZONE_FIELD, None)
-            user_unit_system = \
-                getattr(profile,
-                        settings.VISITOR_INFO_PROFILE_UNIT_SYSTEM_FIELD, None)
-            request.visitor['user'] = {
-                'timezone': user_timezone,
-                'unit_system': user_unit_system
-            }
+    if request.user.is_authenticated():
+      # If user is logged in, add current settings
+      user = request.user
+      user_timezone = getattr(user, settings.USER_TIMEZONE_FIELD, None)
+      user_unit_system =  getattr(user, settings.USER_UNIT_SYSTEM_FIELD, None)
+      request.visitor['user'] = {
+        'timezone': user_timezone,
+        'unit_system': user_unit_system
+      }
 
-        request.visitor['cookie_notice'] = cookie_notice
+    request.visitor['cookie_notice'] = cookie_notice

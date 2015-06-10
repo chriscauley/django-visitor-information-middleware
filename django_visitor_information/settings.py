@@ -14,24 +14,15 @@
 # limitations under the License.
 
 import os
-from os.path import join as pjoin
 
 from django.conf import settings
 
-BASE_DIR = os.path.realpath(os.path.dirname(__file__))
-DEFAULT_GEOIP_DATABASE_PATH = pjoin(BASE_DIR,
-                                    'static/GeoLiteCity.dat')
+DEFAULT_GEOIP_DATABASE_PATH = os.path.join(settings.BASE_DIR,'GeoLiteCity.dat')
 
 # Path to the geoip database file
-VISITOR_INFO_GEOIP_DATABASE_PATH = getattr(settings,
-                                           'VISITOR_INFO_GEOIP_DATABASE_PATH',
-                                           DEFAULT_GEOIP_DATABASE_PATH)
+VISITOR_INFO_GEOIP_DATABASE_PATH = getattr(settings,'VISITOR_INFO_GEOIP_DATABASE_PATH',DEFAULT_GEOIP_DATABASE_PATH)
 
 # Field on the user profile model which stores a timezone
-VISITOR_INFO_PROFILE_TIMEZONE_FIELD = getattr(settings,
-                                              'PROFILE_TIMEZONE_FIELD',
-                                              'timezone')
+VISITOR_INFO_PROFILE_TIMEZONE_FIELD = getattr(settings,'PROFILE_TIMEZONE_FIELD','timezone')
 # Field on the user profile model which stores unit system
-VISITOR_INFO_PROFILE_UNIT_SYSTEM_FIELD = getattr(settings,
-                                                 'PROFILE_UNIT_SYSTEM_FIELD',
-                                                 'unit_system')
+VISITOR_INFO_PROFILE_UNIT_SYSTEM_FIELD = getattr(settings,'PROFILE_UNIT_SYSTEM_FIELD','unit_system')
