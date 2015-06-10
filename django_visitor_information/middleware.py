@@ -54,7 +54,7 @@ class TimezoneMiddleware(object):
       timezone_name = request.session.get('django_timezone',None)
       if timezone_name:
         timezone = pytz.timezone(timezone_name)
-      if not timezone:
+      if not timezone and gi4:
         timezone_name = gi4.time_zone_by_addr(request.META['REMOTE_ADDR'])
         if timezone_name:
           timezone = pytz.timezone(timezone_name)
