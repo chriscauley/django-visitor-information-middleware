@@ -68,9 +68,7 @@ class TimezoneMiddleware(object):
       pytz.timezone('America/Chicago')
 
     try:
-      print 'activating timezone'
       timezone.activate(user_timezone)
-      print 'activated'
     except Exception, e:
       extra = {'_user': request.user, '_timezone': user_timezone}
       logger.error('Invalid timezone selected: %s' % (str(e)), extra=extra)
