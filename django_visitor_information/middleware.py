@@ -63,9 +63,8 @@ class TimezoneMiddleware(object):
         setattr(user,TIMEZONE_FIELD,user_timezone)
         user.save()
       
-    #default to houston time since most our users are on the Space Station
     if not user_timezone:
-      user_timezone = pytz.timezone('America/Chicago')
+      user_timezone = pytz.timezone(getattr(settings,'TIME_ZONE','America/Chicago'))
 
     try:
       timezone.activate(user_timezone)
